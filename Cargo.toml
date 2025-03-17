@@ -1,0 +1,10 @@
+[package]
+name = "h-5822-logger"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serialport = "4.7"
+fltk = "1.5"
+chrono = "0.4.40"
+rust_xlsxwriter = "0.84.0"
