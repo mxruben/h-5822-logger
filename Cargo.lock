@@ -203,11 +203,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "fltk-theme"
+version = "0.7.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "40d05a4e6dbc150473f5d765e1e1839961f86bf3a9169b0e06e0c91ba65eb843"
+dependencies = [
+ "fltk",
+]
+
+[[package]]
 name = "h-5822-logger"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "crossbeam-channel",
  "fltk",
+ "fltk-theme",
  "rust_xlsxwriter",
  "serialport",
 ]

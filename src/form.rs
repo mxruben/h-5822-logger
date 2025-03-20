@@ -1,3 +1,4 @@
+use fltk::group;
 #[allow(deprecated)]
 use fltk::{app, button::Button, frame::Frame, group::Grid, input::Input, prelude::*, text::SimpleTerminal};
 
@@ -57,13 +58,15 @@ impl ScaleLogForm {
 
         grid.show_grid(false);
         grid.set_layout(20, 9);
+        grid.set_gap(3, 3);
+        grid.set_margins(3, 3, 3, 3);
 
         grid.set_widget(&mut entry_port_label, 0, 0)?;
         grid.set_widget(&mut entry_port, 0, 1..3)?;
         grid.set_widget(&mut button_open, 0, 3)?;
-        grid.set_widget(&mut terminal, 1..19, 0..9)?;
-        grid.set_widget(&mut button_start, 19, 0)?;
-        grid.set_widget(&mut button_stop, 19, 1)?;
+        grid.set_widget(&mut button_start, 0, 4)?;
+        grid.set_widget(&mut button_stop, 0, 5)?;
+        grid.set_widget(&mut terminal, 1..20, 0..9)?;
 
         grid.end();
 
@@ -109,9 +112,5 @@ impl ScaleLogForm {
             }
         };
         self.state = state;
-    }
-
-    pub fn state(&self) -> FormState {
-        self.state
     }
 }

@@ -1,5 +1,4 @@
-use std::time;
-use std::fmt;
+use std::{thread, time, fmt, io};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScaleUnit {
@@ -98,8 +97,114 @@ pub enum ScaleStatus {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum SerialCommand {
+pub enum ScaleLoggerCommand {
     OpenPort(String),
-    Start,
-    Stop,
+    StartLog,
+    StopLog,
+}
+
+pub struct ScaleLogger {
+    status_reciever: crossbeam_channel::Receiver<ScaleStatus>,
+    command_sender: crossbeam_channel::Sender<ScaleLoggerCommand>
+}
+
+fn last_line(s: &str) -> Option<String> {
+    let (mut line, _) = s.rsplit_once('\n')?;
+    line = line.trim();
+    let (_, line) = line.rsplit_once('\n')?;
+
+    Some(line.to_string())
+}
+
+impl ScaleLogger {
+    pub fn new() -> Self {
+        let (status_sender, status_reciever) = crossbeam_channel::unbounded::<ScaleStatus>();
+        let (command_sender, command_reciever) = crossbeam_channel::unbounded::<ScaleLoggerCommand>();
+        let scale_logger = Self {
+            status_reciever,
+            command_sender
+        };
+        scale_logger.spawn(status_sender, command_reciever);
+        scale_logger
+    }
+
+    pub fn open(&self, name: String) -> Result<(), crossbeam_channel::SendError<ScaleLoggerCommand>> {
+        self.command_sender.send(ScaleLoggerCommand::OpenPort(name))?;
+        Ok(())
+    }
+
+    pub fn start_log(&self) -> Result<(), crossbeam_channel::SendError<ScaleLoggerCommand>> {
+        self.command_sender.send(ScaleLoggerCommand::StartLog)?;
+        Ok(())
+    }
+
+    pub fn stop_log(&self) -> Result<(), crossbeam_channel::SendError<ScaleLoggerCommand>> {
+        self.command_sender.send(ScaleLoggerCommand::StopLog)?;
+        Ok(())
+    }
+
+    pub fn try_status(&self) -> Result<ScaleStatus, crossbeam_channel::TryRecvError> {
+        self.status_reciever.try_recv()
+    }
+
+    fn spawn(&self, status_sender: crossbeam_channel::Sender<ScaleStatus>, command_reciever: crossbeam_channel::Receiver<ScaleLoggerCommand>) {
+        thread::spawn(move || {
+            let mut port: Option<Box<dyn serialport::SerialPort>> = None;
+            let mut started = false;
+            let mut current_time = time::Instant::now();
+    
+            loop {
+                // Process commands
+                if let Ok(command) = command_reciever.try_recv() {
+                    match command {
+                        ScaleLoggerCommand::OpenPort(name) => {
+                            match serialport::new(name.as_str(), 9600).timeout(time::Duration::from_millis(50)).open() {
+                                Ok(p) => {
+                                    port = Some(p);
+                                    status_sender.send(ScaleStatus::OpenSucceeded(name)).unwrap();
+                                },
+                                Err(_) => {
+                                    status_sender.send(ScaleStatus::OpenFailed(name)).unwrap();
+                                }
+                            }
+                        },
+                        ScaleLoggerCommand::StartLog => {
+                            if let Some(port) = &mut port {
+                                port.clear(serialport::ClearBuffer::All).unwrap();
+                            }
+                            started = true;
+                        },
+                        ScaleLoggerCommand::StopLog => {
+                            started = false;
+                        }
+                    }
+                }
+                // Send weight
+                if started && current_time.elapsed().as_millis() > 50 {
+                    if let Some(port) = &mut port {
+                        // let mut buf = "".to_string();
+                        let mut buf: Vec<u8> = vec![0; 64];
+                        port.flush().unwrap();
+                        match port.read_exact(buf.as_mut_slice()) {
+                            Ok(_) => {
+                                let buf = String::from_utf8_lossy(&buf);
+                                let line = last_line(&buf);
+                                if let Some(line) = line {
+                                    let weight = ScaleWeight::from_str(&line);
+                                    if let Ok(weight) = weight {
+                                        status_sender.send(ScaleStatus::Weight(weight)).unwrap();
+                                    }
+                                }
+                            },
+                            Err(ref e) if e.kind() == io::ErrorKind::TimedOut => (),
+                            Err(_) => {
+                                status_sender.send(ScaleStatus::Disconnected).unwrap();
+                            }
+                        }
+                    }
+                    current_time = time::Instant::now();
+                }
+            }
+        });
+    }
 }
