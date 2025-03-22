@@ -3,8 +3,8 @@ mod scale;
 mod spreadsheet;
 
 use chrono::DateTime;
-use fltk::{app, prelude::*, window::Window};
 use fltk_theme::{ThemeType, WidgetTheme};
+use fltk::app;
 use form::FormState;
 use scale::{ScaleLogger, ScaleStatus};
 use spreadsheet::SpreadsheetWriter;
@@ -14,18 +14,9 @@ fn main() {
     let widget_theme = WidgetTheme::new(ThemeType::Metro);
     widget_theme.apply();
 
-    let (form_sender, form_reciever) = app::channel::<form::Message>();
-
-    let mut window = Window::default()
-            .with_size(800, 600)
-            .with_label("Scale Log")
-            .center_screen();
+    let (form_sender, form_reciever) = app::channel::<form::FormMessage>();
 
     let mut sl_form = form::ScaleLogForm::new(form_sender.clone()).unwrap();
-
-    window.make_resizable(true);
-    window.end();
-    window.show();
 
     let scale_logger = ScaleLogger::new();
     let mut sheet_writer = SpreadsheetWriter::new();
@@ -33,15 +24,15 @@ fn main() {
     while app::check() {
         if let Some(msg) = form_reciever.recv() {
             match msg {
-                form::Message::OpenSerial => {
+                form::FormMessage::OpenSerial => {
                     scale_logger.open(sl_form.port_name()).unwrap()
                 },
-                form::Message::StartLog => {
+                form::FormMessage::StartLog => {
                     sl_form.set_state(FormState::Started);
-                    scale_logger.start_log().unwrap();
+                    scale_logger.start_log(sl_form.log_frequency()).unwrap();
                     sheet_writer = SpreadsheetWriter::new();
                 },
-                form::Message::StopLog => {
+                form::FormMessage::StopLog => {
                     sl_form.set_state(FormState::Stopped);
                     scale_logger.stop_log().unwrap();
                     sheet_writer.save();

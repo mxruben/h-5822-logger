@@ -99,7 +99,7 @@ pub enum ScaleStatus {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ScaleLoggerCommand {
     OpenPort(String),
-    StartLog,
+    StartLog(u128),
     StopLog,
 }
 
@@ -133,8 +133,8 @@ impl ScaleLogger {
         Ok(())
     }
 
-    pub fn start_log(&self) -> Result<(), crossbeam_channel::SendError<ScaleLoggerCommand>> {
-        self.command_sender.send(ScaleLoggerCommand::StartLog)?;
+    pub fn start_log(&self, frequency: u128) -> Result<(), crossbeam_channel::SendError<ScaleLoggerCommand>> {
+        self.command_sender.send(ScaleLoggerCommand::StartLog(frequency))?;
         Ok(())
     }
 
@@ -152,6 +152,7 @@ impl ScaleLogger {
             let mut port: Option<Box<dyn serialport::SerialPort>> = None;
             let mut started = false;
             let mut current_time = time::Instant::now();
+            let mut log_frequency: u128 = 500;
     
             loop {
                 // Process commands
@@ -168,10 +169,11 @@ impl ScaleLogger {
                                 }
                             }
                         },
-                        ScaleLoggerCommand::StartLog => {
-                            if let Some(port) = &mut port {
-                                port.clear(serialport::ClearBuffer::All).unwrap();
-                            }
+                        ScaleLoggerCommand::StartLog(frequency) => {
+                            // if let Some(port) = &mut port {
+                            //     port.clear(serialport::ClearBuffer::All).unwrap();
+                            // }
+                            log_frequency = frequency;
                             started = true;
                         },
                         ScaleLoggerCommand::StopLog => {
@@ -180,9 +182,9 @@ impl ScaleLogger {
                     }
                 }
                 // Send weight
-                if started && current_time.elapsed().as_millis() > 50 {
+                if started && current_time.elapsed().as_millis() > log_frequency {
                     if let Some(port) = &mut port {
-                        // let mut buf = "".to_string();
+                        port.clear(serialport::ClearBuffer::All).unwrap();
                         let mut buf: Vec<u8> = vec![0; 64];
                         port.flush().unwrap();
                         match port.read_exact(buf.as_mut_slice()) {
