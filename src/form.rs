@@ -1,4 +1,4 @@
-use fltk::{enums::Color, input::IntInput, misc::InputChoice, window};
+use fltk::{input::IntInput, misc::InputChoice, window};
 #[allow(deprecated)]
 use fltk::{app, button::Button, frame::Frame, group::{self, Flex}, input::Input, prelude::*, text::SimpleTerminal, enums};
 
@@ -27,8 +27,6 @@ pub struct ScaleLogForm {
 
     input_log_frequency: IntInput,
     choice_log_frequency_unit: InputChoice,
-
-    state: FormState,
 }
 
 impl ScaleLogForm {
@@ -114,8 +112,6 @@ impl ScaleLogForm {
 
             input_log_frequency,
             choice_log_frequency_unit,
-
-            state: FormState::NoPortOpen
         };
 
         scale_log_form.set_state(FormState::NoPortOpen);
@@ -167,6 +163,5 @@ impl ScaleLogForm {
                 self.button_stop.deactivate();
             }
         };
-        self.state = state;
     }
 }

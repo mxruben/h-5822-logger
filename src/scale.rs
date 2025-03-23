@@ -1,11 +1,11 @@
-use std::{thread, time, fmt, io};
+use std::{fmt, io, thread, time};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScaleUnit {
     Pounds,
     Ounces,
     Grams,
-    Kilograms
+    Kilograms,
 }
 
 impl fmt::Display for ScaleUnit {
@@ -24,7 +24,7 @@ pub struct ScaleWeight {
     pub unit: ScaleUnit,
     pub value: f32,
     pub stable: bool,
-    pub time: time::SystemTime
+    pub time: time::SystemTime,
 }
 
 #[derive(Debug)]
@@ -32,58 +32,41 @@ pub enum WeightConversionError {
     InvalidString,
     InvalidStable,
     InvalidWeight,
-    InvalidUnit
+    InvalidUnit,
 }
 
 impl ScaleWeight {
-    pub fn from_str(s: &str) -> Result<Self, WeightConversionError> {
+    pub fn from_str(s: String) -> Result<Self, WeightConversionError> {
         if s.len() < 16 {
-            return Err(WeightConversionError::InvalidString)
+            return Err(WeightConversionError::InvalidString);
         }
 
         let stable = match &s[..2] {
-            "ST" => {
-                true
-            },
-            "US" => {
-                false
-            },
-            _ => {
-                return Err(WeightConversionError::InvalidStable)
-            }
+            "ST" => true,
+            "US" => false,
+            _ => return Err(WeightConversionError::InvalidStable),
         };
 
-        let value_str = s[6..14].trim();
+        let mut value_str = s[6..14].to_string();
+        value_str.retain(|c| !c.is_whitespace());
         let value: f32 = match value_str.parse() {
             Ok(v) => v,
-            Err(_) => {
-                return Err(WeightConversionError::InvalidWeight)
-            }
+            Err(_) => return Err(WeightConversionError::InvalidWeight),
         };
 
         let unit = match s[15..].trim() {
-            "oz" => {
-                ScaleUnit::Ounces
-            },
-            "lb" => {
-                ScaleUnit::Pounds
-            },
-            "g" => {
-                ScaleUnit::Grams
-            },
-            "kg" => {
-                ScaleUnit::Kilograms
-            }
-            _ => {
-                return Err(WeightConversionError::InvalidUnit)
-            }
+            "oz" => ScaleUnit::Ounces,
+            "lb" => ScaleUnit::Pounds,
+            "g" => ScaleUnit::Grams,
+            "kg" => ScaleUnit::Kilograms,
+            _ => return Err(WeightConversionError::InvalidUnit),
         };
 
         Ok(Self {
             unit,
             value,
             stable,
-            time: time::SystemTime::now()
+            time: time::SystemTime::now(),
         })
     }
 }
@@ -93,7 +76,7 @@ pub enum ScaleStatus {
     OpenSucceeded(String),
     OpenFailed(String),
     Weight(ScaleWeight),
-    Disconnected
+    Disconnected,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -105,7 +88,7 @@ pub enum ScaleLoggerCommand {
 
 pub struct ScaleLogger {
     status_reciever: crossbeam_channel::Receiver<ScaleStatus>,
-    command_sender: crossbeam_channel::Sender<ScaleLoggerCommand>
+    command_sender: crossbeam_channel::Sender<ScaleLoggerCommand>,
 }
 
 fn last_line(s: &str) -> Option<String> {
@@ -119,22 +102,31 @@ fn last_line(s: &str) -> Option<String> {
 impl ScaleLogger {
     pub fn new() -> Self {
         let (status_sender, status_reciever) = crossbeam_channel::unbounded::<ScaleStatus>();
-        let (command_sender, command_reciever) = crossbeam_channel::unbounded::<ScaleLoggerCommand>();
+        let (command_sender, command_reciever) =
+            crossbeam_channel::unbounded::<ScaleLoggerCommand>();
         let scale_logger = Self {
             status_reciever,
-            command_sender
+            command_sender,
         };
         scale_logger.spawn(status_sender, command_reciever);
         scale_logger
     }
 
-    pub fn open(&self, name: String) -> Result<(), crossbeam_channel::SendError<ScaleLoggerCommand>> {
-        self.command_sender.send(ScaleLoggerCommand::OpenPort(name))?;
+    pub fn open(
+        &self,
+        name: String,
+    ) -> Result<(), crossbeam_channel::SendError<ScaleLoggerCommand>> {
+        self.command_sender
+            .send(ScaleLoggerCommand::OpenPort(name))?;
         Ok(())
     }
 
-    pub fn start_log(&self, frequency: u128) -> Result<(), crossbeam_channel::SendError<ScaleLoggerCommand>> {
-        self.command_sender.send(ScaleLoggerCommand::StartLog(frequency))?;
+    pub fn start_log(
+        &self,
+        frequency: u128,
+    ) -> Result<(), crossbeam_channel::SendError<ScaleLoggerCommand>> {
+        self.command_sender
+            .send(ScaleLoggerCommand::StartLog(frequency))?;
         Ok(())
     }
 
@@ -147,57 +139,66 @@ impl ScaleLogger {
         self.status_reciever.try_recv()
     }
 
-    fn spawn(&self, status_sender: crossbeam_channel::Sender<ScaleStatus>, command_reciever: crossbeam_channel::Receiver<ScaleLoggerCommand>) {
+    fn spawn(
+        &self,
+        status_sender: crossbeam_channel::Sender<ScaleStatus>,
+        command_reciever: crossbeam_channel::Receiver<ScaleLoggerCommand>,
+    ) {
         thread::spawn(move || {
             let mut port: Option<Box<dyn serialport::SerialPort>> = None;
             let mut started = false;
+            let mut first_log = false;
             let mut current_time = time::Instant::now();
             let mut log_frequency: u128 = 500;
-    
+
             loop {
                 // Process commands
                 if let Ok(command) = command_reciever.try_recv() {
                     match command {
                         ScaleLoggerCommand::OpenPort(name) => {
-                            match serialport::new(name.as_str(), 9600).timeout(time::Duration::from_millis(50)).open() {
+                            match serialport::new(name.as_str(), 9600)
+                                .timeout(time::Duration::from_millis(50))
+                                .open()
+                            {
                                 Ok(p) => {
                                     port = Some(p);
-                                    status_sender.send(ScaleStatus::OpenSucceeded(name)).unwrap();
-                                },
+                                    status_sender
+                                        .send(ScaleStatus::OpenSucceeded(name))
+                                        .unwrap();
+                                }
                                 Err(_) => {
                                     status_sender.send(ScaleStatus::OpenFailed(name)).unwrap();
                                 }
                             }
-                        },
+                        }
                         ScaleLoggerCommand::StartLog(frequency) => {
-                            // if let Some(port) = &mut port {
-                            //     port.clear(serialport::ClearBuffer::All).unwrap();
-                            // }
                             log_frequency = frequency;
                             started = true;
-                        },
+                            first_log = true;
+                        }
                         ScaleLoggerCommand::StopLog => {
                             started = false;
                         }
                     }
                 }
                 // Send weight
-                if started && current_time.elapsed().as_millis() > log_frequency {
+                if started && (current_time.elapsed().as_millis() > log_frequency || first_log) {
+                    first_log = false;
                     if let Some(port) = &mut port {
                         port.clear(serialport::ClearBuffer::All).unwrap();
                         let mut buf: Vec<u8> = vec![0; 64];
-                        port.flush().unwrap();
+                        // port.flush().unwrap();
                         match port.read_exact(buf.as_mut_slice()) {
                             Ok(_) => {
                                 let buf = String::from_utf8_lossy(&buf);
                                 let line = last_line(&buf);
                                 if let Some(line) = line {
-                                    let weight = ScaleWeight::from_str(&line);
+                                    let weight = ScaleWeight::from_str(line);
                                     if let Ok(weight) = weight {
                                         status_sender.send(ScaleStatus::Weight(weight)).unwrap();
                                     }
                                 }
-                            },
+                            }
                             Err(ref e) if e.kind() == io::ErrorKind::TimedOut => (),
                             Err(_) => {
                                 status_sender.send(ScaleStatus::Disconnected).unwrap();
