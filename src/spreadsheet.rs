@@ -38,6 +38,6 @@ impl SpreadsheetWriter {
     pub fn save(&mut self) {
         let time = time::SystemTime::now();
         let datetime: DateTime<Local> = time.into();
-        self.workbook.save(format!("log {}.xlsx", datetime.format("%m-%d-%Y %H:%M:%S"))).unwrap();
+        self.workbook.save(format!("log {}.xlsx", datetime.format("%m-%d-%Y %H.%M.%S"))).unwrap();
     }
 }
